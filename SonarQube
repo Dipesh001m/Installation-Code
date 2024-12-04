@@ -1,1 +1,3 @@
+you want to create sonarqube through docker then use below command
 
+docker run -d -p 9000:9000 sonarqube:lts
