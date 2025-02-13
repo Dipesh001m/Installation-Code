@@ -1,116 +1,124 @@
-# **Ludo Application Deployment on a Remote Server Using GitHub Webhooks and Nginx**
+# Deploying Node.js Application on a Remote Server using GitHub Actions CI/CD Pipeline
 
-## **1️⃣ Overview**
-This guide explains how to deploy a Node.js-based Ludo application on a remote server. The application will be automatically updated using **GitHub Webhooks** and served via **Nginx** as a reverse proxy. PM2 will be used for process management.
+## **1. Prerequisites**
+Before setting up GitHub Actions, ensure that the following prerequisites are met:
 
-## **2️⃣ Prerequisites**
-- A **remote server** (Ubuntu/Debian/CentOS) with a **public IP**.
-- Node.js and NPM installed.
-- Git installed (`sudo apt install git` or `sudo yum install git`).
-- PM2 installed globally (`npm install -g pm2`).
-- Nginx installed (`sudo apt install nginx` or `sudo yum install nginx`).
-- A GitHub repository containing the **Ludo application**.
+- A remote server with SSH access.
+- Node.js and PM2 installed on the remote server.
+- A GitHub repository containing your Node.js application.
+- SSH key-based authentication configured between GitHub Actions and the remote server.
 
----
-## **3️⃣ Step 1: Clone the Ludo Application**
-On the remote server, navigate to the deployment directory and clone the application:
+## **2. Configure Your Remote Server**
+### **Install Node.js and PM2**
+Run the following commands on your remote server:
 ```bash
-cd /var/www
-sudo git clone https://github.com/your-repo/LudoGroup_admin.git
-cd LudoGroup_admin
+sudo apt update && sudo apt install -y nodejs npm
+npm install -g pm2
 ```
 
-Set the correct permissions:
-```bash
-sudo chown -R $USER:$USER /var/www/LudoGroup_admin
-```
-
----
-## **4️⃣ Step 2: Install Dependencies & Configure Environment**
-Navigate to the application folder and install dependencies:
-```bash
-cd /var/www/LudoGroup_admin
-npm install
-```
-
-Create and configure the `.env` file:
-```bash
-echo "PORT=3023" > .env
-```
-
----
-## **5️⃣ Step 3: Configure GitHub Webhook**
-1. Go to your GitHub repository settings.
-2. Navigate to **Webhooks** > Click **Add webhook**.
-3. Set the **Payload URL** to:
+### **Set Up SSH Access for GitHub Actions**
+1. Generate an SSH key on your local machine:
+   ```bash
+   ssh-keygen -t rsa -b 4096 -C "github-actions"
    ```
-   http://your_server_ip:3023/github-webhook
+2. Copy the public key (`~/.ssh/id_rsa.pub`) to the remote server:
+   ```bash
+   ssh-copy-id -i ~/.ssh/id_rsa user@remote_server_ip
    ```
-4. Set **Content type** to `application/json`.
-5. Select the event trigger: `Just the push event`.
-6. Click **Add webhook**.
+3. Add the **private key (`id_rsa`)** as a **GitHub Secret** (e.g., `SSH_PRIVATE_KEY`).
 
----
-## **6️⃣ Step 4: Modify Ludo Application for Webhook Handling**
-Edit `ludoGroup_server.js` to handle webhook requests:
-```javascript
-const express = require('express');
-const { exec } = require('child_process');
-require('dotenv').config();
+## **3. Create GitHub Actions Workflow**
+In your GitHub repository, create a workflow file: `.github/workflows/deploy.yml`
 
-const app = express();
-app.use(express.json());
+```yaml
+name: Deploy Node.js App
 
-app.post('/github-webhook', (req, res) => {
-    console.log('Webhook received from GitHub');
-    exec('cd /var/www/LudoGroup_admin && git pull origin master && npm install && pm2 restart ludoGroup_server',
-        (err, stdout, stderr) => {
-            if (err) {
-                console.error(`Deployment Error: ${err.message}`);
-                return res.status(500).send('Deployment failed');
-            }
-            console.log(`stdout: ${stdout}`);
-            console.error(`stderr: ${stderr}`);
-            res.status(200).send('Deployment successful');
-        }
-    );
-});
+on:
+  push:
+    branches:
+      - main  # Change branch if needed
 
-const PORT = process.env.PORT || 3023;
-app.listen(PORT, () => {
-    console.log(`Ludo server running on port ${PORT}`);
-});
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18  # Adjust as required
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Tests (Optional)
+        run: npm test  # Skip if not applicable
+
+      - name: Deploy to Remote Server
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/LudoGroup_admin
+            git pull origin main
+            npm install
+            pm2 restart ludoGroup_server.js || pm2 start ludoGroup_server.js
 ```
 
-Restart the application:
+## **4. Add GitHub Secrets**
+Go to **GitHub Repository → Settings → Secrets and Variables → Actions → New Repository Secret**, then add:
+
+| Secret Name        | Value (Example)                   |
+|--------------------|---------------------------------|
+| `SSH_HOST`        | `your_server_ip`                |
+| `SSH_USER`        | `your_ssh_user`                 |
+| `SSH_PRIVATE_KEY` | `Contents of id_rsa`            |
+
+## **5. Push Code & Trigger Deployment**
+After setting up the workflow, push your code to the `main` branch to trigger deployment:
 ```bash
-pm install
-pm start  # Or use PM2 (recommended)
-pm2 start ludoGroup_server.js --name ludoGroup_server
-pm2 save
+git add .
+git commit -m "Deploy Node.js app via GitHub Actions"
+git push origin main
 ```
 
----
-## **7️⃣ Step 5: Configure Nginx as a Reverse Proxy**
-### **Install Nginx (if not installed)**
+## **6. Verify Deployment**
+To check if your application is running correctly on the remote server:
 ```bash
-sudo apt install nginx  # Ubuntu/Debian
-sudo yum install nginx  # CentOS/RHEL
+pm2 list
+pm2 logs ludoGroup_server.js
 ```
 
-### **Create an Nginx Configuration File**
-```bash
-sudo nano /etc/nginx/sites-available/ludo
-```
+## **Conclusion**
+With this setup, your Node.js application will be automatically deployed to the remote server whenever you push changes to the `main` branch. This ensures a seamless and automated deployment process using GitHub Actions CI/CD pipeline.
 
-### **Add the Configuration**
+
+
+
+# Deploying a Node.js Application on a Remote Server Using Nginx and GitHub Actions CI/CD
+
+## 1. Setup Remote Server
+Ensure your remote server (e.g., AWS EC2, VPS, DigitalOcean, etc.) has:
+- **Node.js** and **NPM** installed
+- **PM2** installed to manage the application
+- **Nginx** installed for reverse proxy
+- **SSH access** using a private key
+
+## 2. Configure Nginx Reverse Proxy
+Edit the Nginx configuration file (`/etc/nginx/sites-available/default` or `/etc/nginx/nginx.conf`):
+
 ```nginx
 server {
     listen 80;
-    server_name your_server_ip;
+    server_name your_domain_or_server_ip;
 
     location / {
-        proxy_pass http://localhost:3023/;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -120,73 +128,92 @@ server {
 }
 ```
 
-### **Enable the Configuration & Restart Nginx**
+Restart Nginx:
 ```bash
-sudo ln -s /etc/nginx/sites-available/ludo /etc/nginx/sites-enabled/
-sudo nginx -t  # Test for syntax errors
 sudo systemctl restart nginx
 ```
 
-### **Open Firewall for HTTP Access**
-For Ubuntu/Debian (UFW):
+## 3. Setup SSH Access for GitHub Actions
+### Generate SSH Key
+Run the following command on your local machine:
 ```bash
-sudo ufw allow 80/tcp
-sudo ufw reload
+ssh-keygen -t rsa -b 4096 -C "github-actions-deploy"
 ```
-For CentOS/RHEL (firewalld):
+
+### Configure Server
+Copy the **public key** (`~/.ssh/id_rsa.pub`) and add it to `/home/your_user/.ssh/authorized_keys` on the remote server.
+
+### Configure GitHub Secrets
+Copy the **private key** (`~/.ssh/id_rsa`) and add it as a **GitHub Secret** (e.g., `SSH_PRIVATE_KEY`).
+
+## 4. Create GitHub Actions Workflow
+Create a `.github/workflows/deploy.yml` file in your repository:
+
+```yaml
+name: Deploy Node.js App
+
+on:
+  push:
+    branches:
+      - main  # Change to your deployment branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Deploy to Remote Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/LudoGroup_admin
+            git pull origin main
+            npm install
+            pm2 restart ludoGroup_server.js
+            sudo systemctl restart nginx
+```
+
+## 5. Add GitHub Secrets
+Go to **GitHub → Your Repo → Settings → Secrets and Variables → Actions → New Repository Secret**
+
+Add the following secrets:
+- `SERVER_IP` → Your server's IP
+- `SSH_USER` → Your SSH username
+- `SSH_PRIVATE_KEY` → Your private key
+
+## 6. Push Code to Trigger Deployment
+Push changes to the **`main` branch**:
 ```bash
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --reload
+git add .
+git commit -m "Deploying Node.js app"
+git push origin main
 ```
+GitHub Actions will **automatically deploy** your app on the remote server.
 
----
-## **8️⃣ Step 6: Test Deployment**
-- Open the browser and go to:
-  ```
-  http://your_server_ip/admin/login
-  ```
-- Make a small change in the GitHub repository, then push:
-  ```bash
-  git add .
-  git commit -m "Test GitHub webhook deployment"
-  git push origin master
-  ```
-- Check the logs on the remote server:
-  ```bash
-  pm2 logs ludoGroup_server
-  ```
-
----
-## **9️⃣ (Optional) Enable HTTPS with Let's Encrypt**
-To secure the application with SSL:
+## 7. Verify Deployment
+Check if the application is running:
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d your_domain
-```
-Now, access your app securely via:
-```
-https://your_domain/admin/login
+pm2 status
+curl http://your_server_ip
 ```
 
----
-## **🎯 Summary**
-| Feature | Without Nginx | With Nginx |
-|---------|--------------|------------|
-| **Access URL** | `http://your_server_ip:3023/admin/login` | `http://your_server_ip/admin/login` |
-| **Removes Port** | ❌ | ✅ |
-| **HTTPS (SSL)** | ❌ | ✅ |
-| **Security** | ❌ Direct access to Node.js | ✅ Protects backend |
-| **Scalability** | ❌ | ✅ Load balancing possible |
-
-✅ **Recommended:** Use **Nginx + PM2** for a production-ready deployment.
-
----
-## **🔹 Final Thoughts**
-With this setup:
-- The application **auto-updates** on `git push`.
-- Nginx **removes the need for ports in the URL**.
-- HTTPS can be enabled for **security**.
-- PM2 **keeps the app running** even after crashes or reboots.
-
-🚀 **Now your Ludo application is fully deployed and scalable!** Let me know if you need any modifications. 🔥
+## Conclusion
+Your Node.js application is now deployed on a remote server using **GitHub Actions, Nginx, and PM2** for process management. 🚀
 
