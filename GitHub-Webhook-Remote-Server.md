@@ -411,3 +411,150 @@ console.log(process.env.YOUR_VARIABLE);
 
 🚀 Now your `.env` should work properly!
 
+
+
+
+
+# Troubleshooting Guide: Git Pull Issues on Remote Server
+
+## **Step 1: Check Git Repository on Remote Server**
+SSH into your remote server and navigate to your deployment directory:
+
+```sh
+ssh user@remote-server
+cd /var/www/LudoGroup_admin
+ls -la
+```
+
+Check if the `.git` directory exists:
+
+```sh
+ls -la .git
+```
+
+If `.git` is missing, the repository is not properly initialized. Re-clone the repository:
+
+```sh
+git clone git@github.com:your-username/your-repo.git .
+```
+
+---
+
+## **Step 2: Verify the Git Remote URL**
+Run the following command:
+
+```sh
+git remote -v
+```
+
+### **Expected Output:**
+```
+origin  git@github.com:your-username/your-repo.git (fetch)
+origin  git@github.com:your-username/your-repo.git (push)
+```
+
+If it shows `fatal: not a git repository`, initialize Git and set the remote URL:
+
+```sh
+git init
+git remote add origin git@github.com:your-username/your-repo.git
+git pull origin main
+```
+
+---
+
+## **Step 3: Check for SSH Key Issues**
+If your remote URL starts with `git@github.com`, Git uses SSH authentication. Ensure your SSH key is set up correctly.
+
+### **Check if the SSH key exists:**
+
+```sh
+cat ~/.ssh/id_rsa.pub
+```
+
+### **Add the key to GitHub:**
+- Go to **GitHub → Settings → SSH Keys**
+- Add the **public key (`id_rsa.pub`)**
+
+### **Test SSH connection:**
+
+```sh
+ssh -T git@github.com
+```
+
+### **Expected Output:**
+```
+Hi your-username! You've successfully authenticated, but GitHub does not provide shell access.
+```
+
+If SSH fails, use HTTPS instead:
+
+```sh
+git remote set-url origin https://github.com/your-username/your-repo.git
+```
+
+---
+
+## **Step 4: Reset Repository Permissions**
+Sometimes, permissions prevent `git pull`. Fix it with:
+
+```sh
+sudo chown -R $(whoami):$(whoami) /var/www/LudoGroup_admin
+chmod -R 755 /var/www/LudoGroup_admin
+```
+
+---
+
+## **Step 5: Switch to the Correct Branch**
+Check your current branch:
+
+```sh
+git branch
+```
+
+If you are on `main`, switch and retry:
+
+```sh
+git checkout main
+git pull origin main
+```
+
+---
+
+## **Step 6: Force Pull if There Are Conflicts**
+If `git pull` fails due to local changes:
+
+```sh
+git reset --hard HEAD
+git pull origin main --force
+```
+
+⚠️ **Warning:** This will **discard any local changes!**
+
+---
+
+## **Step 7: Add GitHub Token for Authentication (If Needed)**
+If SSH authentication still fails, use a **GitHub Personal Access Token**:
+
+### **Generate a Token:**
+- Go to **GitHub → Settings → Developer Settings → Personal Access Tokens**
+- Create a token with **repo** permissions
+
+### **Use HTTPS Authentication:**
+
+```sh
+git remote set-url origin https://your-token@github.com/your-username/your-repo.git
+```
+
+---
+
+## **🎯 Final Check**
+Try pulling again:
+
+```sh
+git pull origin main
+```
+
+If everything works, re-run your **GitHub Actions deployment!** 🚀
+
+
